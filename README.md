@@ -1,6 +1,4 @@
 # chiv-admin-helper
-Helps chiv admins by validating player lists in your clipboard.
-
 ## What it does
 When you run `listplayers` in the chiv console this tool will automatically grab your clipboard contents
 and scans the list of players.
@@ -23,16 +21,10 @@ False positives like innocent noobs or alt accounts are possible.
 ## How it works
 As mentioned above this tool continuously monitors your clipboard data.
 
-***IMPORTANT:*** **It only reads text data (not files or images) and only responds when the clipboard contains a `listplayers` output.**
+***IMPORTANT:*** It only reads text data (not files or images) and only responds when the clipboard contains a `listplayers` output.
 
-While windows defender does not classify this as a threat be aware that this might trigger other virus scanners,
-since this could technically be used to steal passwords!
-You are welcome to check the source code yourself and build this project on your own to verify that no such activity is happening.
-
-## Setup
-If you want to use this tool you need to receive credentials since the wanted board and any other resources are not publicly accessible.
-To get access open a ticket on the SAK discord server.
-
-Run this tool via powershell, cmd or shortcut.
-Credentials can be provided as a command line argument or dynamically input into the tool after startup.
-
+This behavior usually causes antivirus software to classify this program as virus,
+since this could technically be used to steal passwords from your clipboard!
+For this reason, it is strongly recommended to install this tool by compiling it yourself.
+This is the only way to guarantee that you are running a safe and unaltered build of the program.
+Further instructions are detailed in the [installation guide](INSTALLATION.md).
