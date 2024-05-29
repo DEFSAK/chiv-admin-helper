@@ -7,42 +7,55 @@ import (
 	"fmt"
 	"google.golang.org/api/idtoken"
 	"io"
-	"log"
 	"net/http"
-	"os"
-	"slices"
-	"strings"
+	"time"
 )
 
-var (
+const (
+	validateUrl = "https://europe-west3-prj-prd-chiv-01.cloudfunctions.net/func-prd-validate_players"
+	banUrl      = "https://europe-west3-prj-prd-chiv-01.cloudfunctions.net/func-prd-ban_player"
+)
+
+type backendService struct {
 	validateClient *http.Client
 	banClient      *http.Client
-)
-
-func init() {
-	var err error
-	ctx := context.Background()
-	// figure out credential location
-	path := ""
-	if len(os.Args) > 1 {
-		path = os.Args[1]
-	} else {
-		fmt.Print("Enter the path to your credentials file and press enter: ")
-		_, _ = fmt.Scan(&path)
-	}
-	// login with credentials
-	validateClient, err = idtoken.NewClient(ctx, validateUrl, idtoken.WithCredentialsFile(path))
-	if err != nil {
-		log.Fatal(err)
-	}
-	banClient, err = idtoken.NewClient(ctx, banUrl, idtoken.WithCredentialsFile(path))
-	if err != nil {
-		log.Fatal(err)
-	}
 }
 
-// validatePlayers sends a list of players to the validation endpoint and returns all information sorted by display name
-func validatePlayers(serverName string, players []connectedPlayer) (validatedPlayers []validatedPlayer, err error) {
+// newBackendService creates an authenticated client for validation and banning
+func newBackendService(credentialsPath string) (svc backendService, err error) {
+	ctx := context.Background()
+	credentialsFile := idtoken.WithCredentialsFile(credentialsPath)
+	svc.validateClient, err = idtoken.NewClient(ctx, validateUrl, credentialsFile)
+	if err != nil {
+		err = fmt.Errorf("authentication failed: %w", err)
+		return
+	}
+	svc.banClient, err = idtoken.NewClient(ctx, banUrl, credentialsFile)
+	if err != nil {
+		err = fmt.Errorf("authentication failed: %w", err)
+		return
+	}
+	return
+}
+
+type validatedPlayer struct {
+	PlayfabId   string    `json:"playfab_id"`
+	DisplayName string    `json:"display_name"`
+	Aliases     []string  `json:"aliases"`
+	CreatedAt   time.Time `json:"created_at"`
+	Platform    string    `json:"platform"`
+	BanCommand  string    `json:"ban_command"`
+	WantedFor   []string  `json:"wanted_for"`
+	WantedLevel string    `json:"wanted_level"`
+}
+
+type connectedPlayer struct {
+	DisplayName string `json:"display_name"`
+	PlayfabId   string `json:"playfab_id"`
+}
+
+// validatePlayers sends a list of players to the validation endpoint and returns all information
+func (svc backendService) validatePlayers(serverName string, players []connectedPlayer) (validatedPlayers []validatedPlayer, err error) {
 	reqParams := struct {
 		CheckWantedBoard bool              `json:"check_wanted_board"`
 		ServerName       string            `json:"server_name"`
@@ -54,24 +67,27 @@ func validatePlayers(serverName string, players []connectedPlayer) (validatedPla
 	}
 	body, _ := json.Marshal(reqParams)
 	req, _ := http.NewRequest(http.MethodPost, validateUrl, bytes.NewReader(body))
-	resp, _ := validateClient.Do(req)
-	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("call to validation backend failed with status code %d", resp.StatusCode)
+	resp, err := svc.validateClient.Do(req)
+	if err != nil {
+		err = fmt.Errorf("call to validate backend failed: %w", err)
 		return
 	}
-	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		err = fmt.Errorf("call to validate backend failed with status code %d", resp.StatusCode)
+		return
+	}
 
-	respData := outputSchema{}
+	respBody, _ := io.ReadAll(resp.Body)
+	respData := struct {
+		ValidatedPlayers []validatedPlayer `json:"validated_players"`
+	}{}
 	_ = json.Unmarshal(respBody, &respData)
 	validatedPlayers = respData.ValidatedPlayers
-	slices.SortFunc(validatedPlayers, func(a, b validatedPlayer) int {
-		return strings.Compare(a.DisplayName, b.DisplayName)
-	})
 	return
 }
 
 // banPlayer adds the given player to the wanted board and returns a pre-written ban command
-func banPlayer(playfabId string, charges []string) (banCommand string, err error) {
+func (svc backendService) banPlayer(playfabId string, charges []string) (banCommand string, err error) {
 	reqParams := struct {
 		PlayFabId string   `json:"playfab_id"`
 		Charges   []string `json:"charges"`
@@ -81,14 +97,19 @@ func banPlayer(playfabId string, charges []string) (banCommand string, err error
 	}
 	body, _ := json.Marshal(reqParams)
 	req, _ := http.NewRequest(http.MethodPost, banUrl, bytes.NewReader(body))
-	resp, _ := banClient.Do(req)
-	respBody, _ := io.ReadAll(resp.Body)
+	resp, err := svc.banClient.Do(req)
+	if err != nil {
+		err = fmt.Errorf("call to ban backend failed: %w", err)
+	}
 	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("failed to ban player: permission denied")
+		err = fmt.Errorf("call to validate backend failed with status code %d", resp.StatusCode)
 		return
 	}
 
-	respData := outputSchema{}
+	respBody, _ := io.ReadAll(resp.Body)
+	respData := struct {
+		BanCommand string `json:"ban_command"`
+	}{}
 	_ = json.Unmarshal(respBody, &respData)
 	banCommand = respData.BanCommand
 	return

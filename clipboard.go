@@ -33,15 +33,18 @@ func watchClipboard(ctx context.Context, interval time.Duration) (events chan st
 		ticker := time.NewTicker(interval)
 		oldVersion, _, _ := getClipboardSequenceNumber.Call()
 		for {
-			select {
-			case <-ctx.Done():
+			<-ticker.C
+			err := ctx.Err()
+			if err != nil {
 				close(events)
 				return
-			case <-ticker.C:
-				currentVersion, _, _ := getClipboardSequenceNumber.Call()
-				if oldVersion != currentVersion {
-					oldVersion = currentVersion
-					events <- readClipboardString()
+			}
+			currentVersion, _, _ := getClipboardSequenceNumber.Call()
+			if oldVersion != currentVersion {
+				oldVersion = currentVersion
+				clipboardString := readClipboardString()
+				if clipboardString != "" {
+					events <- clipboardString
 				}
 			}
 		}
@@ -49,7 +52,8 @@ func watchClipboard(ctx context.Context, interval time.Duration) (events chan st
 	return
 }
 
-// readClipboardString reads the windows clipboard data into program memory, assuming that the clipboard contains raw text
+// readClipboardString reads the Windows clipboard data into program memory,
+// assuming that the clipboard contains raw text
 func readClipboardString() (data string) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
