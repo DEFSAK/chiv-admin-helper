@@ -12,13 +12,15 @@ import (
 
 func main() {
 	// Crash guard
+	interrupts := make(chan os.Signal, 1)
+	signal.Notify(interrupts, os.Interrupt)
 	defer func() {
 		err := recover()
 		if err != nil {
-			log.Error("Fatal error occurred", "err", err)
+			log.Error("A fatal error occurred that can not be recovered", "err", err)
 			log.Info("If this error persists please create a bug report")
-			fmt.Println("Press Enter to close this window...")
-			fmt.Scan(nil)
+			fmt.Println("Press Ctrl-C or close this window...")
+			<-interrupts
 			os.Exit(1)
 		}
 	}()
@@ -39,9 +41,7 @@ func main() {
 		log.Error("Login to backend failed", "err", err)
 	}
 
-	// Setup watchers for commands, clipboard copy and os interrupts
-	interrupts := make(chan os.Signal, 1)
-	signal.Notify(interrupts, os.Interrupt)
+	// Setup watchers for commands and clipboard copy operations
 	ctx, cancelWatchers := context.WithCancel(context.Background())
 	clipboardEvents := watchClipboard(ctx, time.Millisecond*50)
 	stdinEvents := watchStdin(ctx)
@@ -54,13 +54,14 @@ mainLoop:
 	for {
 		select {
 		case event := <-stdinEvents:
-			err = executeCommand(event, validatedPlayers)
+			// Process commands when received
+			err = executeCommand(event, validatedPlayers, svc)
 			if err != nil {
 				log.Warn("Failed to execute command", "err", err)
 				continue mainLoop
 			}
 		case event := <-clipboardEvents:
-			// Read listplayers from clipboard
+			// Validate player list from clipboard
 			if strings.HasPrefix(event, "ServerName - ") {
 				serverName, players, err := readPlayerList(event)
 				if err != nil {
