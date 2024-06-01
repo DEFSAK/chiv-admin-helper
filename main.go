@@ -32,13 +32,15 @@ func main() {
 	// Make sure the user has credentials
 	credentialPath, err := setupCredentials()
 	if err != nil {
-		log.Error("Credential setup failed", "err", err)
+		log.Error("Credential setup failed")
+		panic(err)
 	}
 
 	// Login to backend
 	svc, err := newBackendService(credentialPath)
 	if err != nil {
-		log.Error("Login to backend failed", "err", err)
+		log.Error("Login to backend failed")
+		panic(err)
 	}
 
 	// Setup watchers for commands and clipboard copy operations
