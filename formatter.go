@@ -3,10 +3,10 @@ package main
 import (
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/gen2brain/beeep"
+	"slices"
 	"strconv"
 	"strings"
-	"time"
+	"unicode/utf8"
 )
 
 var platforms = map[string]string{
@@ -23,10 +23,15 @@ var styles = map[string]lipgloss.Style{
 
 // printTable nicely formats the list of validated players and adds coloring and audio clues
 func printTable(validatedPlayers []validatedPlayer) {
+	slices.SortFunc(validatedPlayers, func(a, b validatedPlayer) int {
+		return strings.Compare(a.DisplayName, b.DisplayName)
+	})
+
 	maxDisplayNameLength := 0
 	for _, player := range validatedPlayers {
-		if len(player.DisplayName) > maxDisplayNameLength {
-			maxDisplayNameLength = len(player.DisplayName)
+		width := utf8.RuneCountInString(player.DisplayName)
+		if width > maxDisplayNameLength {
+			maxDisplayNameLength = width
 		}
 	}
 
@@ -49,10 +54,6 @@ func printTable(validatedPlayers []validatedPlayer) {
 			lines = append(lines, player.BanCommand)
 		}
 		fmt.Println(styles[player.WantedLevel].Render(strings.Join(lines, "\n")))
-		if player.WantedLevel != "" {
-			go beeep.Beep(beeep.DefaultFreq, beeep.DefaultDuration)
-			time.Sleep(time.Millisecond * 100)
-		}
 	}
 	fmt.Println()
 }

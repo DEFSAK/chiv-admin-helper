@@ -57,10 +57,18 @@ mainLoop:
 		select {
 		case event := <-stdinEvents:
 			// Process commands when received
-			err = executeCommand(event, validatedPlayers, svc)
+			inGameCommand, err := executeCommand(event, validatedPlayers, svc)
 			if err != nil {
 				log.Warn("Failed to execute command", "err", err)
 				continue mainLoop
+			}
+			if inGameCommand != "" {
+				err = writeClipboardString(inGameCommand)
+				if err != nil {
+					log.Warn("Failed to write command to clipboard", "err", err)
+				} else {
+					log.Info("In-game command was copied to clipboard", "command", inGameCommand)
+				}
 			}
 		case event := <-clipboardEvents:
 			// Validate player list from clipboard

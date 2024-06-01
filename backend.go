@@ -8,17 +8,18 @@ import (
 	"google.golang.org/api/idtoken"
 	"io"
 	"net/http"
+	"slices"
 	"time"
 )
 
 const (
 	validateUrl = "https://europe-west3-prj-prd-chiv-01.cloudfunctions.net/func-prd-validate_players"
-	banUrl      = "https://europe-west3-prj-prd-chiv-01.cloudfunctions.net/func-prd-ban_player"
+	actionUrl   = "https://europe-west3-prj-prd-chiv-01.cloudfunctions.net/func-prd-player_action"
 )
 
 type backendService struct {
 	validateClient *http.Client
-	banClient      *http.Client
+	actionClient   *http.Client
 }
 
 // newBackendService creates an authenticated client for validation and banning
@@ -30,7 +31,7 @@ func newBackendService(credentialsPath string) (svc backendService, err error) {
 		err = fmt.Errorf("authentication failed: %w", err)
 		return
 	}
-	svc.banClient, err = idtoken.NewClient(ctx, banUrl, credentialsFile)
+	svc.actionClient, err = idtoken.NewClient(ctx, actionUrl, credentialsFile)
 	if err != nil {
 		err = fmt.Errorf("authentication failed: %w", err)
 		return
@@ -72,45 +73,54 @@ func (svc backendService) validatePlayers(serverName string, players []connected
 		err = fmt.Errorf("call to validate backend failed: %w", err)
 		return
 	}
-	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("call to validate backend failed with status code %d", resp.StatusCode)
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		err = fmt.Errorf("call to validate backend failed: %s", string(respBody))
 		return
 	}
 
-	respBody, _ := io.ReadAll(resp.Body)
 	respData := struct {
 		ValidatedPlayers []validatedPlayer `json:"validated_players"`
 	}{}
 	_ = json.Unmarshal(respBody, &respData)
 	validatedPlayers = respData.ValidatedPlayers
+	for i, player := range validatedPlayers {
+		if slices.Contains(localTrustList, player.PlayfabId) && player.WantedLevel == "suspicious" {
+			validatedPlayers[i].WantedLevel = ""
+			validatedPlayers[i].BanCommand = ""
+		}
+	}
 	return
 }
 
-// banPlayer adds the given player to the wanted board and returns a pre-written ban command
-func (svc backendService) banPlayer(playfabId string, charges []string) (banCommand string, err error) {
+// playerAction executes an action that targets a single player. For example banning, unbanning or trusting.
+// These action may result in a command that should be run on the server.
+func (svc backendService) playerAction(action, playfabId string, params map[string]any) (outputCommand string, err error) {
 	reqParams := struct {
-		PlayFabId string   `json:"playfab_id"`
-		Charges   []string `json:"charges"`
+		Action     string         `json:"action"`
+		PlayFabId  string         `json:"playfab_id"`
+		Parameters map[string]any `json:"parameters"`
 	}{
-		PlayFabId: playfabId,
-		Charges:   charges,
+		Action:     action,
+		PlayFabId:  playfabId,
+		Parameters: params,
 	}
 	body, _ := json.Marshal(reqParams)
-	req, _ := http.NewRequest(http.MethodPost, banUrl, bytes.NewReader(body))
-	resp, err := svc.banClient.Do(req)
+	req, _ := http.NewRequest(http.MethodPost, actionUrl, bytes.NewReader(body))
+	resp, err := svc.actionClient.Do(req)
 	if err != nil {
-		err = fmt.Errorf("call to ban backend failed: %w", err)
+		err = fmt.Errorf("call to player action backend failed: %w", err)
 	}
-	if resp.StatusCode != http.StatusOK {
-		err = fmt.Errorf("call to validate backend failed with status code %d", resp.StatusCode)
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode >= 400 {
+		err = fmt.Errorf("call to player action backend failed: %s", string(respBody))
 		return
 	}
 
-	respBody, _ := io.ReadAll(resp.Body)
 	respData := struct {
-		BanCommand string `json:"ban_command"`
+		OutputCommand string `json:"output_command"`
 	}{}
 	_ = json.Unmarshal(respBody, &respData)
-	banCommand = respData.BanCommand
+	outputCommand = respData.OutputCommand
 	return
 }
