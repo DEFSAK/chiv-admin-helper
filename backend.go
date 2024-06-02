@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"google.golang.org/api/idtoken"
 	"io"
@@ -73,6 +74,10 @@ func (svc backendService) validatePlayers(serverName string, players []connected
 		err = fmt.Errorf("call to validate backend failed: %w", err)
 		return
 	}
+	if resp.StatusCode == 403 {
+		err = errors.New("call to validate backend failed: permission denied")
+		return
+	}
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
 		err = fmt.Errorf("call to validate backend failed: %s", string(respBody))
@@ -110,6 +115,10 @@ func (svc backendService) playerAction(action, playfabId string, params map[stri
 	resp, err := svc.actionClient.Do(req)
 	if err != nil {
 		err = fmt.Errorf("call to player action backend failed: %w", err)
+	}
+	if resp.StatusCode == 403 {
+		err = errors.New("call to player action backend failed: permission denied")
+		return
 	}
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode >= 400 {
