@@ -19,6 +19,10 @@ Wanted players are marked in red, meaning they have an outstanding ban.
 Admins should use the provided command to ban them immediately.
 If you think someone is banned that shouldn't be, then you can open a ticket on the SAK discord.
 
+Note that even after a player has been banned or kicked they might still show up in the player validation.
+This is because even players who have left are still contained in the servers listplayers table.
+This might cause banned players to be reported multiple times, even when already gone from the server.
+
 ### Platform information
 This property of players is not 100% accurate and should be treated as an estimate.
 There currently are 3 different possible platform types:
