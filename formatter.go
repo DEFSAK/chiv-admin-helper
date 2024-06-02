@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/gen2brain/beeep"
 	"slices"
 	"strconv"
 	"strings"
@@ -52,6 +53,9 @@ func printTable(validatedPlayers []validatedPlayer) {
 		}
 		if player.BanCommand != "" {
 			lines = append(lines, player.BanCommand)
+		}
+		if player.WantedLevel == "wanted" {
+			go beeep.Beep(beeep.DefaultFreq, 100)
 		}
 		fmt.Println(styles[player.WantedLevel].Render(strings.Join(lines, "\n")))
 	}
